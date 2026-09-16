@@ -1,13 +1,38 @@
 import Cocoa
 
+enum SearchMode: CaseIterable {
+    case applications
+    case audioFiles
+
+    var placeholder: String {
+        switch self {
+        case .applications: return "Search Applications"
+        case .audioFiles: return "Search Audio Files"
+        }
+    }
+
+    var badge: String {
+        switch self {
+        case .applications: return "Apps"
+        case .audioFiles: return "Audio"
+        }
+    }
+}
+
 final class SearchWindowController: NSWindowController {
     private let searchField = NSTextField()
+    private let modeLabel = NSTextField(labelWithString: "")
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
     private let containerView = NSVisualEffectView()
 
-    private var allApps: [AppEntry] = []
-    private var filteredApps: [AppEntry] = []
+    private var mode: SearchMode = .applications
+    private let providers: [SearchMode: SearchProvider] = [
+        .applications: AppSearchProvider(),
+        .audioFiles: FileSearchProvider(contentType: "public.audio")
+    ]
+    private var results: [SearchResult] = []
+    private var keyMonitor: Any?
 
     convenience init() {
         let width: CGFloat = 560
@@ -22,6 +47,13 @@ final class SearchWindowController: NSWindowController {
         panel.delegate = self
         configureWindow(panel)
         configureViews(in: panel)
+        installKeyMonitor()
+    }
+
+    deinit {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
     }
 
     // MARK: - Setup
@@ -66,11 +98,17 @@ final class SearchWindowController: NSWindowController {
         searchField.isBordered = false
         searchField.focusRingType = .none
         searchField.backgroundColor = .clear
-        searchField.placeholderString = "Search Applications"
         searchField.delegate = self
-        searchField.frame = NSRect(x: 20, y: panel.frame.height - 58, width: panel.frame.width - 40, height: 36)
+        searchField.frame = NSRect(x: 20, y: panel.frame.height - 58, width: panel.frame.width - 120, height: 36)
         searchField.autoresizingMask = [.width, .minYMargin]
         containerView.addSubview(searchField)
+
+        modeLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        modeLabel.textColor = .tertiaryLabelColor
+        modeLabel.alignment = .right
+        modeLabel.frame = NSRect(x: panel.frame.width - 96, y: panel.frame.height - 46, width: 76, height: 16)
+        modeLabel.autoresizingMask = [.minXMargin, .minYMargin]
+        containerView.addSubview(modeLabel)
 
         let divider = NSBox(frame: NSRect(x: 0, y: panel.frame.height - 62, width: panel.frame.width, height: 1))
         divider.boxType = .separator
@@ -95,6 +133,24 @@ final class SearchWindowController: NSWindowController {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         containerView.addSubview(scrollView)
+
+        updateModeUI()
+    }
+
+    /// Option+Space cycles search mode while the panel is open. AppKit has no
+    /// standard "command" selector for this combination (unlike arrow keys or
+    /// Enter/Escape via NSTextFieldDelegate), so it's intercepted at the raw
+    /// NSEvent level and consumed before it can insert a non-breaking space.
+    private func installKeyMonitor() {
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            let optionSpace = event.keyCode == 49 && event.modifierFlags.contains(.option)
+            if optionSpace, self.window?.isKeyWindow == true {
+                self.cycleMode()
+                return nil
+            }
+            return event
+        }
     }
 
     // MARK: - Show / hide
@@ -109,11 +165,10 @@ final class SearchWindowController: NSWindowController {
 
     private func show() {
         guard let window else { return }
-        allApps = AppFinder.loadApplications()
-        filteredApps = allApps
+        mode = .applications
         searchField.stringValue = ""
-        tableView.reloadData()
-        selectRow(0)
+        updateModeUI()
+        runSearch(query: "")
         centerOnScreen()
 
         window.alphaValue = 0
@@ -131,6 +186,7 @@ final class SearchWindowController: NSWindowController {
 
     private func hide() {
         guard let window, window.isVisible else { return }
+        providers.values.forEach { $0.cancel() }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -162,43 +218,54 @@ final class SearchWindowController: NSWindowController {
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    // MARK: - Filtering & selection
+    // MARK: - Mode
 
-    private func filterApps(query: String) {
-        if query.isEmpty {
-            filteredApps = allApps
-        } else {
-            let lower = query.lowercased()
-            filteredApps = allApps
-                .filter { $0.name.lowercased().contains(lower) }
-                .sorted { a, b in
-                    let aStarts = a.name.lowercased().hasPrefix(lower)
-                    let bStarts = b.name.lowercased().hasPrefix(lower)
-                    if aStarts != bStarts { return aStarts }
-                    return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
-                }
+    private func cycleMode() {
+        providers[mode]?.cancel()
+        let modes = SearchMode.allCases
+        let currentIndex = modes.firstIndex(of: mode) ?? 0
+        mode = modes[(currentIndex + 1) % modes.count]
+        updateModeUI()
+        runSearch(query: searchField.stringValue)
+    }
+
+    private func updateModeUI() {
+        searchField.placeholderString = mode.placeholder
+        modeLabel.stringValue = mode.badge
+    }
+
+    // MARK: - Search & selection
+
+    private func runSearch(query: String) {
+        guard let provider = providers[mode] else { return }
+        provider.search(query: query) { [weak self] results in
+            self?.applyResults(results)
         }
+    }
+
+    private func applyResults(_ results: [SearchResult]) {
+        self.results = results
         tableView.reloadData()
         selectRow(0)
     }
 
     private func selectRow(_ row: Int) {
-        guard row >= 0, row < filteredApps.count else { return }
+        guard row >= 0, row < results.count else { return }
         tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         tableView.scrollRowToVisible(row)
     }
 
     private func moveSelection(by delta: Int) {
-        guard !filteredApps.isEmpty else { return }
+        guard !results.isEmpty else { return }
         let current = tableView.selectedRow
-        let next = min(max(current + delta, 0), filteredApps.count - 1)
+        let next = min(max(current + delta, 0), results.count - 1)
         selectRow(next)
     }
 
     private func openSelected() {
         let row = tableView.selectedRow
-        guard row >= 0, row < filteredApps.count else { return }
-        NSWorkspace.shared.open(filteredApps[row].url)
+        guard row >= 0, row < results.count else { return }
+        NSWorkspace.shared.open(results[row].url)
         hide()
     }
 
@@ -219,7 +286,7 @@ extension SearchWindowController: NSWindowDelegate {
 
 extension SearchWindowController: NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) {
-        filterApps(query: searchField.stringValue)
+        runSearch(query: searchField.stringValue)
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -246,7 +313,7 @@ extension SearchWindowController: NSTextFieldDelegate {
 
 extension SearchWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        filteredApps.count
+        results.count
     }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
@@ -258,7 +325,7 @@ extension SearchWindowController: NSTableViewDataSource, NSTableViewDelegate {
             cell = AppCellView()
             cell.identifier = identifier
         }
-        let entry = filteredApps[row]
+        let entry = results[row]
         cell.configure(name: entry.name, icon: entry.icon)
         return cell
     }

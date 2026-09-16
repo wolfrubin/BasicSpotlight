@@ -47,7 +47,19 @@ PLIST
 
 echo "Loading LaunchAgent..."
 launchctl bootout "gui/$(id -u)/$LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
+
+# bootstrap can transiently fail with an I/O error if it races the bootout
+# above (launchd hasn't finished tearing down the old service yet).
+for attempt in 1 2 3 4 5; do
+    if launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null; then
+        break
+    fi
+    if [ "$attempt" -eq 5 ]; then
+        echo "Failed to load the LaunchAgent after several attempts." >&2
+        exit 1
+    fi
+    sleep 0.5
+done
 
 echo
 echo "Installed and running. Press Cmd+Space to open BasicSpotlight."

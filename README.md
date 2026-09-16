@@ -1,6 +1,6 @@
 # BasicSpotlight
 
-A minimal, native Spotlight-style app launcher for macOS. Press **Cmd+Space**, type an app name, hit Enter — it searches `/Applications` and `/System/Applications` (including apps nested one folder deep, e.g. `rekordbox`) and launches whatever you pick. That's all it does.
+A minimal, native Spotlight-style launcher for macOS. Press **Cmd+Space**, type a name, hit Enter — it launches whatever you pick. Press **Option+Space** while it's open to switch what you're searching: installed applications (`/Applications` and `/System/Applications`, including apps nested one folder deep, e.g. `rekordbox`), or audio files anywhere on disk.
 
 ## Requirements
 
@@ -123,11 +123,27 @@ Changes take effect the next time you open the search panel — no need to resta
 
 | Key | Action |
 |---|---|
-| `Cmd+Space` | Toggle the search panel |
-| Type | Filter apps live |
+| `Cmd+Space` | Toggle the search panel (always opens in Applications mode) |
+| `Option+Space` | Cycle search mode (Applications → Audio Files → ...) |
+| Type | Filter results live |
 | `↑` / `↓` | Move selection |
-| `Enter` | Launch selected app |
+| `Enter` | Open selected item |
 | `Esc` / click away | Dismiss |
+
+## Search modes
+
+- **Applications** (default) — see [Configuring search paths](#configuring-search-paths) above.
+- **Audio Files** — searches every audio file on the Mac by name (mp3, wav, aiff, m4a, etc.), backed by Spotlight's file index (`NSMetadataQuery`) rather than a custom crawler, so it's always current and doesn't need Full Disk Access for most locations. Requires at least 2 characters typed before it queries.
+
+Search modes are implemented behind a small `SearchProvider` protocol (see `Sources/AppLauncher/SearchProvider.swift`), so a mode's backend — Spotlight today — can be swapped for something else later (e.g. a custom index) without touching the UI. Adding a new file-type mode is just adding a case to `SearchMode` and a `FileSearchProvider(contentType:)` instance for its [Uniform Type Identifier](https://developer.apple.com/documentation/uniformtypeidentifiers/system-declared-uniform-type-identifiers) (e.g. `public.image`, `public.movie`).
+
+Two things are always excluded from file search, since they're an app's internal resources rather than files you'd want to open: anything inside a `.app` bundle, and any folder you list in `ExcludedPaths`:
+
+```bash
+defaults write com.wolfrubin.applauncher ExcludedPaths -array "$HOME/Music/Ableton/Factory Packs"
+```
+
+(That example excludes Ableton Live's bundled sample packs, which otherwise flood audio search results with stock one-shots.) Check or reset the same way as `SearchPaths`, with `defaults read`/`defaults delete com.wolfrubin.applauncher ExcludedPaths`.
 
 ## Uninstall
 

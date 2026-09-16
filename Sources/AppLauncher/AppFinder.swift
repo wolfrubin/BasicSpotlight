@@ -1,22 +1,16 @@
 import Cocoa
 
-struct AppEntry {
-    let name: String
-    let url: URL
-    let icon: NSImage
-}
-
 enum AppFinder {
-    static func loadApplications() -> [AppEntry] {
+    static func loadApplications() -> [SearchResult] {
         let fileManager = FileManager.default
         var seenNames = Set<String>()
-        var entries: [AppEntry] = []
+        var entries: [SearchResult] = []
 
         func addApp(at url: URL) {
             let name = url.deletingPathExtension().lastPathComponent
             guard seenNames.insert(name).inserted else { return }
             let icon = NSWorkspace.shared.icon(forFile: url.path)
-            entries.append(AppEntry(name: name, url: url, icon: icon))
+            entries.append(SearchResult(name: name, url: url, icon: icon))
         }
 
         for directory in Preferences.searchPaths {
