@@ -10,25 +10,36 @@ A minimal, native Spotlight-style app launcher for macOS. Press **Cmd+Space**, t
   xcode-select --install
   ```
 
-## Build
+## Install
 
 ```bash
 git clone https://github.com/wolfrubin/BasicSpotlight.git
 cd BasicSpotlight
-swift build -c release
+./install.sh
 ```
 
-The binary is produced at `.build/release/AppLauncher`.
+This builds the release binary, copies it to `~/Library/Application Support/AppLauncher/`, and installs a LaunchAgent (`~/Library/LaunchAgents/com.wolfrubin.applauncher.plist`) so it starts at login and restarts if it ever crashes. Re-running `./install.sh` after pulling new changes rebuilds and reloads it.
 
-## Install
+To remove everything the installer set up:
+```bash
+./uninstall.sh
+```
 
-1. Copy the binary somewhere permanent:
+<details>
+<summary>Installing by hand instead</summary>
+
+1. Build:
+   ```bash
+   swift build -c release
+   ```
+
+2. Copy the binary somewhere permanent:
    ```bash
    mkdir -p "$HOME/Library/Application Support/AppLauncher"
    cp .build/release/AppLauncher "$HOME/Library/Application Support/AppLauncher/AppLauncher"
    ```
 
-2. Create a LaunchAgent so it starts automatically at login and restarts if it ever crashes. Save this as `~/Library/LaunchAgents/com.yourname.applauncher.plist` (replace `yourname` and the `$HOME`-expanded path with your actual home directory, since plists don't expand `$HOME`):
+3. Create a LaunchAgent so it starts automatically at login and restarts if it ever crashes. Save this as `~/Library/LaunchAgents/com.yourname.applauncher.plist` (replace `yourname` and the `$HOME`-expanded path with your actual home directory, since plists don't expand `$HOME`):
    ```xml
    <?xml version="1.0" encoding="UTF-8"?>
    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,10 +65,14 @@ The binary is produced at `.build/release/AppLauncher`.
    </plist>
    ```
 
-3. Load it:
+4. Load it:
    ```bash
    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.applauncher.plist
    ```
+
+Note: if you rename the Label here, also update `Preferences.suiteName` in `Sources/AppLauncher/Preferences.swift` to match, or the [configurable search paths](#configuring-search-paths) setting will read from the wrong `defaults` domain.
+
+</details>
 
 ## macOS setup
 
