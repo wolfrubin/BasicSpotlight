@@ -7,10 +7,6 @@ struct AppEntry {
 }
 
 enum AppFinder {
-    /// /Applications holds user-installed apps; built-in Apple apps (System Settings,
-    /// Safari, Calculator, etc.) live in /System/Applications.
-    private static let searchDirectories = ["/Applications", "/System/Applications"]
-
     static func loadApplications() -> [AppEntry] {
         let fileManager = FileManager.default
         var seenNames = Set<String>()
@@ -23,7 +19,7 @@ enum AppFinder {
             entries.append(AppEntry(name: name, url: url, icon: icon))
         }
 
-        for directory in searchDirectories {
+        for directory in Preferences.searchPaths {
             let directoryURL = URL(fileURLWithPath: directory)
             guard let contents = try? fileManager.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: [.isDirectoryKey]) else {
                 continue

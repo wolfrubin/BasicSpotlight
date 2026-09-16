@@ -83,6 +83,27 @@ The first time you press Cmd+Space after installing, macOS will show a prompt li
 
 Once both are done, Cmd+Space opens this app.
 
+## Configuring search paths
+
+By default the app searches `/Applications` and `/System/Applications`. This is stored in the standard macOS place for app settings — `UserDefaults`, backed by `~/Library/Preferences/com.wolfrubin.applauncher.plist` — and can be read or changed with the `defaults` command.
+
+Add or replace the list of folders it searches:
+```bash
+defaults write com.wolfrubin.applauncher SearchPaths -array "/Applications" "/System/Applications" "/Applications/Utilities"
+```
+
+Check the current setting:
+```bash
+defaults read com.wolfrubin.applauncher SearchPaths
+```
+
+Reset to the built-in defaults:
+```bash
+defaults delete com.wolfrubin.applauncher SearchPaths
+```
+
+Changes take effect the next time you open the search panel — no need to restart the app. Each folder is searched one level deep, so apps nested in a named subfolder (like `rekordbox`) are still found.
+
 ## Usage
 
 | Key | Action |
