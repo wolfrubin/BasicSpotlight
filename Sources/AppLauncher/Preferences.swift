@@ -8,12 +8,15 @@ enum Preferences {
     static let defaultSearchPaths = ["/Applications", "/System/Applications"]
     static let excludedPathsKey = "ExcludedPaths"
     static let defaultExcludedPaths: [String] = []
+    static let minimumAudioDurationKey = "MinimumAudioDurationSeconds"
+    static let defaultMinimumAudioDuration: Double = 60
 
     private static let defaults: UserDefaults = {
         let store = UserDefaults(suiteName: suiteName) ?? .standard
         store.register(defaults: [
             searchPathsKey: defaultSearchPaths,
-            excludedPathsKey: defaultExcludedPaths
+            excludedPathsKey: defaultExcludedPaths,
+            minimumAudioDurationKey: defaultMinimumAudioDuration
         ])
         return store
     }()
@@ -26,5 +29,11 @@ enum Preferences {
     /// always-applied rule that skips anything inside a .app bundle.
     static var excludedPaths: [String] {
         (defaults.array(forKey: excludedPathsKey) as? [String]) ?? defaultExcludedPaths
+    }
+
+    /// Audio results shorter than this are treated as samples/loops/one-shots
+    /// rather than full tracks, and excluded from Audio Files search.
+    static var minimumAudioDurationSeconds: Double {
+        defaults.double(forKey: minimumAudioDurationKey)
     }
 }

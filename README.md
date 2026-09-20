@@ -133,7 +133,12 @@ Changes take effect the next time you open the search panel — no need to resta
 ## Search modes
 
 - **Applications** (default) — see [Configuring search paths](#configuring-search-paths) above.
-- **Audio Files** — searches every audio file on the Mac by name (mp3, wav, aiff, m4a, etc.), backed by Spotlight's file index (`NSMetadataQuery`) rather than a custom crawler, so it's always current and doesn't need Full Disk Access for most locations. Requires at least 2 characters typed before it queries.
+- **Audio Files** — searches full-length music tracks on the Mac by name (mp3, wav, aiff, m4a, etc.), backed by Spotlight's file index (`NSMetadataQuery`) rather than a custom crawler, so it's always current and doesn't need Full Disk Access for most locations. Requires at least 2 characters typed before it queries.
+
+  Samples, loops, and one-shots (from sample packs, plugin libraries, etc.) are filtered out by requiring at least 60 seconds of duration (`kMDItemDurationSeconds`) — a path-independent way to keep only real tracks, since it works regardless of which folder or pack a sample came from. Adjust the threshold with:
+  ```bash
+  defaults write com.wolfrubin.applauncher MinimumAudioDurationSeconds -float 90
+  ```
 
 Search modes are implemented behind a small `SearchProvider` protocol (see `Sources/AppLauncher/SearchProvider.swift`), so a mode's backend — Spotlight today — can be swapped for something else later (e.g. a custom index) without touching the UI. Adding a new file-type mode is just adding a case to `SearchMode` and a `FileSearchProvider(contentType:)` instance for its [Uniform Type Identifier](https://developer.apple.com/documentation/uniformtypeidentifiers/system-declared-uniform-type-identifiers) (e.g. `public.image`, `public.movie`).
 

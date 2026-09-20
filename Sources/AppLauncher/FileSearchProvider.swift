@@ -33,6 +33,12 @@ final class FileSearchProvider: NSObject, SearchProvider {
             // (e.g. Ableton's Core Library samples), never something to open directly.
             NSPredicate(format: "NOT (kMDItemPath CONTAINS[cd] %@)", ".app/")
         ]
+        if contentType == "public.audio" {
+            // Samples/loops/one-shots run seconds long regardless of which pack or
+            // folder they live in; full tracks don't, so duration is a reliable,
+            // path-independent way to keep only real music out of this mode.
+            predicates.append(NSPredicate(format: "kMDItemDurationSeconds >= %f", Preferences.minimumAudioDurationSeconds))
+        }
         for excluded in Preferences.excludedPaths {
             predicates.append(NSPredicate(format: "NOT (kMDItemPath BEGINSWITH[cd] %@)", excluded))
         }
